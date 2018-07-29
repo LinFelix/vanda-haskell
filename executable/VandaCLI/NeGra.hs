@@ -197,11 +197,17 @@ main = processArgs (populateHelpMode Help cmdArgs) >>= mainArgs
 
 mainArgs :: Args -> IO ()
 mainArgs (Help cs) = putStr cs
-mainArgs fil@Filter{}
+mainArgs fil@(Filter _ _ _ _ aw dw ap_ dp an dn)
   = do
     expContent <- T.getContents
+    aws <- readFile aw
+    dws <- readFile dw
+    aps <- readFile ap_
+    dps <- readFile dp
+    ans <- readFile an
+    dns <- readFile dn
     let negra = NT.parseNegra expContent
-        preds = generatePreds fil in
+        preds = generatePreds fil (lines aws) (lines dws) (lines aps) (lines dps) (lines ans) (lines dns) in
       NU.putNegra $ filterNegra negra preds
   where
     filterNegra :: N.Negra -> [N.Sentence -> Bool] -> N.Negra
@@ -214,14 +220,23 @@ mainArgs fil@Filter{}
         then x: filterSentences xs preds
         else filterSentences xs preds
 
-
-    generatePreds :: Args -> [N.Sentence -> Bool]
-    generatePreds (Filter l gd id h aw dw apos dpos anod dnod) =
+    generatePreds :: Args -> [String] -> [String] -> [String] -> [String] -> [String] -> [String] -> [N.Sentence -> Bool]
+    generatePreds (Filter l gd sid h awso _ apso _ anso _) awss dwss apss dpss anss dnss =
       [ isInPred (getPred l) . lengthNegraSentence
       , isInPred (getPred gd) . gapDegree
-      , isInPred (getPred id) . N.sId
-      , isInPred (getPred h) . heightNegraSentence]
-    generatePreds _ = []
+      , isInPred (getPred sid) . N.sId
+      , isInPred (getPred h) . heightNegraSentence
+      , if awso == "/dev/null" then const True
+                               else all (`elem` awss) . getWords
+      , not . any (`elem` dwss) . getWords
+      , if apso == "/dev/null" then const True
+                               else all (`elem` apss) . getPos
+      , not . any (`elem` dpss) . getPos
+      , if anso == "/dev/null" then const True
+                               else all (`elem` anss) . getNodes
+      , not . any (`elem` dnss) . getNodes
+      ]
+    generatePreds _ _ _ _ _ _ _ = []
 
 mainArgs (Transform _ isReplacWsbyPosTags startindex)
   = do
@@ -305,12 +320,6 @@ onlyNodes x = [y | y@N.SentenceNode{} <- x]
 
 getNodes :: N.Sentence -> [String]
 getNodes x = map (show . N.sdNum) (onlyNodes (N.sData x))
-
-{- hasWds :: FilePath -> N.Sentence -> Bool
-hasWds "/dev/null" _ = True
-hasWds f x = do
-  alw_wd <- readFile f
-  all (`elem` (words alw_wd) getWords x -}
 
 lengthNegraSentence :: N.Sentence -> Int
 lengthNegraSentence = lengthNegraSentenceData . N.sData
